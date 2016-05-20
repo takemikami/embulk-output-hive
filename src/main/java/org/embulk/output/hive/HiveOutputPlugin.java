@@ -1,5 +1,21 @@
 package org.embulk.output.hive;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.embulk.config.Config;
+import org.embulk.config.ConfigDefault;
+import org.embulk.config.ConfigDiff;
+import org.embulk.config.ConfigSource;
+import org.embulk.config.Task;
+import org.embulk.config.TaskReport;
+import org.embulk.config.TaskSource;
+import org.embulk.spi.*;
+import org.embulk.spi.time.Timestamp;
+import org.embulk.spi.type.*;
+import org.joda.time.format.DateTimeFormat;
+import org.joda.time.format.DateTimeFormatter;
+
 import java.io.File;
 import java.io.OutputStream;
 import java.sql.Connection;
@@ -8,74 +24,17 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.embulk.config.TaskReport;
-import org.embulk.config.Config;
-import org.embulk.config.ConfigDefault;
-import org.embulk.config.ConfigDiff;
-import org.embulk.config.ConfigSource;
-import org.embulk.config.Task;
-import org.embulk.config.TaskSource;
-import org.embulk.spi.*;
-import org.embulk.spi.time.Timestamp;
-import org.embulk.spi.type.*;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
-
 public class HiveOutputPlugin
-        implements OutputPlugin
-{
-    public interface PluginTask
-            extends Task
-    {
-        // configuration url (required String)
-        @Config("url")
-        public String getUrl();
-
-        // configuration user (required String)
-        @Config("user")
-        public String getUser();
-
-        // configuration password (required String)
-        @Config("password")
-        public String getPassword();
-
-        // configuration database (required String)
-        @Config("database")
-        public String getDatabase();
-
-        // configuration table (required String)
-        @Config("table")
-        public String getTable();
-
-        // configuration config_files (required List<String>)
-        @Config("config_files")
-        @ConfigDefault("[]")
-        List<String> getConfigFiles();
-
-        // configuration config (required Map<String,String>)
-        @Config("config")
-        @ConfigDefault("{}")
-        Map<String, String> getConfig();
-
-        // configuration path_prefix (required String)
-        @Config("location")
-        public String getLocation();
-    }
-
+        implements OutputPlugin {
     @Override
     public ConfigDiff transaction(ConfigSource config,
-            Schema schema, int taskCount,
-            OutputPlugin.Control control)
-    {
+                                  Schema schema, int taskCount,
+                                  OutputPlugin.Control control) {
         PluginTask task = config.loadConfig(PluginTask.class);
 
         // retryable (idempotent) output:
         // return resume(task.dump(), schema, taskCount, control);
         control.run(task.dump());
-
         StringBuffer buff = new StringBuffer();
         for (Column c : schema.getColumns()) {
             String hiveType = "string";
@@ -88,7 +47,9 @@ public class HiveOutputPlugin
             } else if (c.getType() instanceof TimestampType) {
                 hiveType = "timestamp";
             }
-            if(buff.length()>0) { buff.append(","); }
+            if (buff.length() > 0) {
+                buff.append(",");
+            }
             buff.append(c.getName()).append(" ").append(hiveType);
         }
 
@@ -113,43 +74,79 @@ public class HiveOutputPlugin
 
     @Override
     public ConfigDiff resume(TaskSource taskSource,
-            Schema schema, int taskCount,
-            OutputPlugin.Control control)
-    {
+                             Schema schema, int taskCount,
+                             OutputPlugin.Control control) {
         throw new UnsupportedOperationException("hive output plugin does not support resuming");
     }
 
     @Override
     public void cleanup(TaskSource taskSource,
-            Schema schema, int taskCount,
-            List<TaskReport> successTaskReports)
-    {
+                        Schema schema, int taskCount,
+                        List<TaskReport> successTaskReports) {
     }
 
     @Override
-    public TransactionalPageOutput open(TaskSource taskSource, Schema schema, int taskIndex)
-    {
+    public TransactionalPageOutput open(TaskSource taskSource, Schema schema, int taskIndex) {
         PluginTask task = taskSource.loadTask(PluginTask.class);
         PageReader reader = new PageReader(schema);
         PluginPageOutput output = new PluginPageOutput(reader, schema, task);
         return output;
     }
 
+    public interface PluginTask
+            extends Task {
+        // configuration url (required String)
+        @Config("url")
+        String getUrl();
+
+        // configuration user (required String)
+        @Config("user")
+        String getUser();
+
+        // configuration password (required String)
+        @Config("password")
+        String getPassword();
+
+        // configuration database (required String)
+        @Config("database")
+        String getDatabase();
+
+        // configuration table (required String)
+        @Config("table")
+        String getTable();
+
+        // configuration config_files (required List<String>)
+        @Config("config_files")
+        @ConfigDefault("[]")
+        List<String> getConfigFiles();
+
+        // configuration config (required Map<String,String>)
+        @Config("config")
+        @ConfigDefault("{}")
+        Map<String, String> getConfig();
+
+        // configuration path_prefix (required String)
+        @Config("location")
+        String getLocation();
+    }
 
     public static class PluginPageOutput
             implements TransactionalPageOutput {
-        private static DateTimeFormatter TO_STRING_FORMATTER_MILLIS = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss.SSS ").withZoneUTC();
+        private static final DateTimeFormatter TO_STRING_FORMATTER_MILLIS = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss.SSS ").withZoneUTC();
         private PageReader reader = null;
         private Schema schema = null;
         private PluginTask task = null;
+        private StringBuffer buff = null;
+
         PluginPageOutput(PageReader reader, Schema schema, PluginTask task) {
             this.reader = reader;
             this.schema = schema;
             this.task = task;
+            this.buff = new StringBuffer();
         }
+
         public void add(Page page) {
             reader.setPage(page);
-            StringBuffer buff = new StringBuffer();
             while (reader.nextRecord()) {
                 for (Column c : schema.getColumns()) {
                     if (c.getIndex() > 0) {
@@ -172,7 +169,12 @@ public class HiveOutputPlugin
                 }
                 buff.append("\n");
             }
+        }
 
+        public void finish() {
+        }
+
+        public void close() {
             // upload to hdfs
             try {
                 Configuration configuration = new Configuration();
@@ -180,24 +182,25 @@ public class HiveOutputPlugin
                     File file = new File(configFile);
                     configuration.addResource(file.toURI().toURL());
                 }
-                for (Map.Entry<String, String> entry: task.getConfig().entrySet()) {
+                for (Map.Entry<String, String> entry : task.getConfig().entrySet()) {
                     configuration.set(entry.getKey(), entry.getValue());
                 }
-                Path hdfsPath = new Path(task.getLocation() + "/00000");
+                Path hdfsPath = new Path(task.getLocation() + "/" + this.hashCode());
                 FileSystem fs = hdfsPath.getFileSystem(configuration);
-                OutputStream output = fs.create(new Path(task.getLocation() + "/00000"), false);
+                OutputStream output = fs.create(hdfsPath, false);
                 output.write(buff.toString().getBytes());
                 output.close();
-
-            } catch(Exception ex) {
+            } catch (Exception ex) {
                 ex.printStackTrace();
                 System.exit(1);
             }
-
         }
-        public void finish() {}
-        public void close() {}
-        public void abort() {}
-        public TaskReport commit() { return Exec.newTaskReport(); }
+
+        public void abort() {
+        }
+
+        public TaskReport commit() {
+            return Exec.newTaskReport();
+        }
     }
 }

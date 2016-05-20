@@ -2,10 +2,8 @@
 <!DOCTYPE module PUBLIC
         "-//Puppy Crawl//DTD Check Configuration 1.3//EN"
         "http://www.puppycrawl.com/dtds/configuration_1_3.dtd">
-<!--
-     This is a subset of ./checkstyle.xml which allows some loose styles
--->
 <module name="Checker">
+    <!-- https://github.com/facebook/presto/blob/master/src/checkstyle/checks.xml -->
     <module name="FileTabCharacter"/>
     <module name="NewlineAtEndOfFile">
         <property name="lineSeparator" value="lf"/>
@@ -19,12 +17,24 @@
         <property name="message" value="Line has trailing whitespace"/>
     </module>
     <module name="RegexpMultiline">
+        <property name="format" value="\{\n\n"/>
+        <property name="message" value="Blank line after opening brace"/>
+    </module>
+    <module name="RegexpMultiline">
+        <property name="format" value="\n\n\s*\}"/>
+        <property name="message" value="Blank line before closing brace"/>
+    </module>
+    <module name="RegexpMultiline">
         <property name="format" value="\n\n\n"/>
         <property name="message" value="Multiple consecutive blank lines"/>
     </module>
     <module name="RegexpMultiline">
         <property name="format" value="\n\n\Z"/>
         <property name="message" value="Blank line before end of file"/>
+    </module>
+    <module name="RegexpMultiline">
+        <property name="format" value="Preconditions\.checkNotNull"/>
+        <property name="message" value="Use of checkNotNull"/>
     </module>
 
     <module name="TreeWalker">
@@ -46,19 +56,19 @@
         <module name="ParenPad"/>
         <module name="TypecastParenPad"/>
         <module name="NeedBraces"/>
-        <module name="LeftCurly">
+        <!-- module name="LeftCurly">
             <property name="option" value="nl"/>
             <property name="tokens" value="CLASS_DEF, CTOR_DEF, INTERFACE_DEF, METHOD_DEF"/>
-        </module>
+        </module -->
         <module name="LeftCurly">
             <property name="option" value="eol"/>
             <property name="tokens" value="
                  LITERAL_CATCH, LITERAL_DO, LITERAL_ELSE, LITERAL_FINALLY, LITERAL_FOR,
                  LITERAL_IF, LITERAL_SWITCH, LITERAL_SYNCHRONIZED, LITERAL_TRY, LITERAL_WHILE"/>
         </module>
-        <module name="RightCurly">
+        <!-- module name="RightCurly">
             <property name="option" value="alone"/>
-        </module>
+        </module -->
         <module name="GenericWhitespace"/>
         <module name="WhitespaceAfter"/>
         <module name="NoWhitespaceBefore"/>
@@ -88,6 +98,16 @@
         </module>
         <module name="MethodTypeParameterName">
             <property name="format" value="^[A-Z][0-9]?$"/>
+        </module>
+
+        <!-- module name="AvoidStarImport"/ -->
+        <module name="RedundantImport"/>
+        <module name="UnusedImports"/>
+        <module name="ImportOrder">
+            <property name="groups" value="*,javax,java"/>
+            <property name="separated" value="true"/>
+            <property name="option" value="bottom"/>
+            <property name="sortStaticImportsAlphabetically" value="true"/>
         </module>
 
         <module name="WhitespaceAround">
