@@ -1,5 +1,7 @@
 # Hive output plugin for Embulk
 
+[![Build Status](https://travis-ci.org/takemikami/embulk-output-hive.svg?branch=master)](https://travis-ci.org/takemikami/embulk-output-hive)
+
 Hive Output Plugin for Embulk, write to HDFS and create external table to Hive.
 
 attention: this plugin is developping, need to build yourself if you use.
