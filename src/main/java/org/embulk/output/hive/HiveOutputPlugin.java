@@ -17,6 +17,7 @@ import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -152,19 +153,23 @@ public class HiveOutputPlugin
                     if (c.getIndex() > 0) {
                         buff.append("\t");
                     }
-                    if (c.getType() instanceof BooleanType) {
-                        buff.append(reader.getBoolean(c));
-                    } else if (c.getType() instanceof LongType) {
-                        buff.append(reader.getLong(c));
-                    } else if (c.getType() instanceof DoubleType) {
-                        buff.append(reader.getDouble(c));
-                    } else if (c.getType() instanceof TimestampType) {
-                        Timestamp v = reader.getTimestamp(c);
-                        buff.append(TO_STRING_FORMATTER_MILLIS.print(v.toEpochMilli()));
-                    } else if (c.getType() instanceof JsonType) {
-                        buff.append(reader.getJson(c));
-                    } else if (c.getType() instanceof StringType) {
-                        buff.append(reader.getString(c));
+                    try {
+                        if (c.getType() instanceof BooleanType) {
+                            buff.append(reader.getBoolean(c));
+                        } else if (c.getType() instanceof LongType) {
+                            buff.append(reader.getLong(c));
+                        } else if (c.getType() instanceof DoubleType) {
+                            buff.append(reader.getDouble(c));
+                        } else if (c.getType() instanceof TimestampType) {
+                            Timestamp v = reader.getTimestamp(c);
+                            buff.append(TO_STRING_FORMATTER_MILLIS.print(v.toEpochMilli()));
+                        } else if (c.getType() instanceof JsonType) {
+                            buff.append(reader.getJson(c));
+                        } else if (c.getType() instanceof StringType) {
+                            buff.append(reader.getString(c));
+                        }
+                    } catch(RuntimeException ex) {
+                        buff.append("");
                     }
                 }
                 buff.append("\n");
@@ -177,20 +182,11 @@ public class HiveOutputPlugin
         public void close() {
             // upload to hdfs
             try {
-                Configuration configuration = new Configuration();
-                for (String configFile : task.getConfigFiles()) {
-                    File file = new File(configFile);
-                    configuration.addResource(file.toURI().toURL());
-                }
-                for (Map.Entry<String, String> entry : task.getConfig().entrySet()) {
-                    configuration.set(entry.getKey(), entry.getValue());
-                }
-                Path hdfsPath = new Path(task.getLocation() + "/" + this.hashCode());
-                FileSystem fs = hdfsPath.getFileSystem(configuration);
-                OutputStream output = fs.create(hdfsPath, false);
+                FileSystem fs = getFileSystem(task);
+                OutputStream output = fs.create(new Path(task.getLocation() + "/" + this.hashCode()), false);
                 output.write(buff.toString().getBytes());
                 output.close();
-            } catch (Exception ex) {
+            } catch(Exception ex) {
                 ex.printStackTrace();
                 System.exit(1);
             }
@@ -203,4 +199,19 @@ public class HiveOutputPlugin
             return Exec.newTaskReport();
         }
     }
+
+    private static FileSystem getFileSystem(PluginTask task) throws IOException {
+        Configuration configuration = new Configuration();
+        for (String configFile : task.getConfigFiles()) {
+            File file = new File(configFile);
+            configuration.addResource(file.toURI().toURL());
+        }
+        for (Map.Entry<String, String> entry: task.getConfig().entrySet()) {
+            configuration.set(entry.getKey(), entry.getValue());
+        }
+        Path hdfsPath = new Path(task.getLocation());
+        FileSystem fs = hdfsPath.getFileSystem(configuration);
+        return fs;
+    }
+
 }
